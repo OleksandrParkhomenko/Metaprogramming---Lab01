@@ -13,11 +13,14 @@ else:
         python runformatter.py <name of file to format> -c <option of config-1><value-1>...<option of config-N><value-N>
             |format with default but some options is changing\n
         python runformatter.py <name of file to format> -c <option of config-1><value-1>...<option of config-N><value-N> -n <file to save configs> 
-            |format with default but some options is changing and save them to another file 
+            |format with default but some options is changing and save them to another file\n
+        python runformatter.py -i
+            | run interactive mode for creation your customized configuration template\n
+        python runformatter.py -i -f <configuration file>
+            | run interactive mode for creation your customized configuration template based on config file you entered\n
          """)
     else:
         try:
-
             format(sys.argv)
         except OSError:
             print("Error! File not found.")

@@ -312,35 +312,42 @@ def refact(input_data, tokens, indent_levels, config, errors_and_warings):
 
 
 def format(argv):
-    try:
-        file = argv[1]
-        f = open(file, "r")
-    except OSError:
-        print("Error! File not found.")
+    from set_config import set_config
+    if len(argv) == 2 and argv[1] == "-i":
+        set_config(argv[1])
+    elif len(argv) == 4 and "-i" in argv and "-f" in argv:
+        set_config("-i", config_to_use=argv[argv.index("-f") + 1])
     else:
-        args = []
-        new_config = ""
-        config_to_use = ""
-        if len(argv) > 2 and argv[2] == "-c":
-            if "-n" in argv:
-                args = argv[3:argv.index("-n")]
-                new_config = argv[argv.index("-n") + 1]
-            else:
-                args = argv[3:]
-                new_config = ""
-        elif len(argv) > 2 and argv[2] == "-f":
-            config_to_use = argv[argv.index("-f") + 1]
+        try:
+            file = argv[1]
+            f = open(file, "r")
+        except OSError:
+            print("Error! File not found.")
+        else:
+            args = []
+            new_config = ""
+            config_to_use = ""
+            if len(argv) > 2 and argv[2] == "-c":
+                if "-n" in argv:
+                    args = argv[3:argv.index("-n")]
+                    new_config = argv[argv.index("-n") + 1]
+                else:
+                    args = argv[3:]
+                    new_config = ""
+            elif len(argv) > 2 and argv[2] == "-f":
+                config_to_use = argv[argv.index("-f") + 1]
+            elif len(argv) > 2 and argv[2] == "-i":
+                args = ["-i"]
 
-        input_data = f.readlines()
-        errors_and_warnings = dict()
-        from set_config import set_config
-        config = set_config(args, new_config, config_to_use)
-        tokens, indent_levels = tokenize(input_data, config, errors_and_warnings)
-        data = refact(input_data, tokens, indent_levels, config, errors_and_warnings)
-        for key in errors_and_warnings.keys():
-            print(errors_and_warnings[key], " | line ", key)
+            input_data = f.readlines()
+            errors_and_warnings = dict()
+            config = set_config(args, new_config, config_to_use)
+            tokens, indent_levels = tokenize(input_data, config, errors_and_warnings)
+            data = refact(input_data, tokens, indent_levels, config, errors_and_warnings)
+            for key in errors_and_warnings.keys():
+                print(errors_and_warnings[key], " | line ", key)
 
-        f.close()
-        f = open(file, "w")
-        f.writelines(data)
-        f.close()
+            f.close()
+            f = open(file, "w")
+            f.writelines(data)
+            f.close()

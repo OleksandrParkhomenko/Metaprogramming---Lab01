@@ -1,9 +1,15 @@
-
-
 def set_config(argv=[], new_config="", config_to_use=""):
-
     import re
     pattern = re.compile(r'\s+')
+
+    interactive = "-i" in argv
+    answer = True
+    if interactive:
+        print("Welcome to interactive mode of setting formatting configurations!")
+        if config_to_use != "":
+            print(config_to_use, "is used as a template.")
+        else:
+            print("Default template is used.")
 
     if config_to_use == "":
         f = open(r"config.txt", "r")
@@ -22,7 +28,14 @@ def set_config(argv=[], new_config="", config_to_use=""):
             pos = line.find('=')
             if pos != -1:
                 key = line[:pos]
-                value = line[pos+1:]
+                value = line[pos + 1:]
+
+                if interactive and answer:
+                    print(key, "|Default:", value)
+                    new_value = input("New value:")
+                    if new_value != "":
+                        value = new_value
+
                 if value == "False":
                     value = False
                 elif value == "True":
@@ -33,6 +46,19 @@ def set_config(argv=[], new_config="", config_to_use=""):
                 config[curr_section][key] = value
             else:
                 curr_section = line
+                while interactive and True:
+                    print("Do you want to change anything in category", curr_section, "? y/n")
+                    _answer = input()
+                    if _answer.lower() == 'y':
+                        answer = True
+                        print("For each option enter new value or press \'Enter\' to skip and set default.")
+                        break
+                    elif _answer.lower() == 'n':
+                        answer = False
+                        break
+                    else:
+                        print("Wrong answer! y/n")
+
                 config[curr_section] = dict()
 
     for i, key in enumerate(argv[:-1]):
@@ -53,6 +79,9 @@ def set_config(argv=[], new_config="", config_to_use=""):
     if __name__ == '__main__':
         print(config)
 
+    if interactive:
+        new_config = input("Enter new config file name:")
+
     if new_config != "":
         f = open(new_config, "w")
         for section in config:
@@ -64,7 +93,6 @@ def set_config(argv=[], new_config="", config_to_use=""):
 
     return config
 
-
-#set_config()
-#set_config(["indent", "5", "BEFORE_LEFT_BRACKET", "true"],new_config="new_config.txt")
-#set_config(config_to_use="new_config.txt")
+# set_config()
+# set_config(["indent", "5", "BEFORE_LEFT_BRACKET", "true"],new_config="new_config.txt")
+# set_config(config_to_use="new_config.txt")
