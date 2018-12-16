@@ -28,7 +28,7 @@ $ python runformatter.py <name of file to format> -f <configuration file>
 ```          
 Formatting with default configuration but given options is changed:
 ```sh
-$python runformatter.py <name of file to format> -c <option of config-1><value-1>...<option of config-N><value-N>
+$ python runformatter.py <name of file to format> -c <option of config-1><value-1>...<option of config-N><value-N>
 ```
 Formatting with default configuration, given options is changed and saved as another configuration file:
 ```sh
