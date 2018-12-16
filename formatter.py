@@ -1,4 +1,4 @@
-import string
+import string, re
 from keyword import kwlist
 
 ASSIGNMENT_OPS = ("=", "+=", "-=", "*=", "/=")
@@ -11,8 +11,10 @@ SHIFT_OPS = ("<<", ">>", ">>>")
 POWER_OP = "**"
 
 
-def split(data, config):
+def split(input_data, config, errors_and_warnings):
     indent_levels = list()
+    data = list(input_data)
+
     for index, line in enumerate(data):
         line = list(line)
         i = 0
@@ -25,7 +27,7 @@ def split(data, config):
                 begin = False
 
             if line[i] in string.punctuation and line[i] != "." and line[i] != "_":
-                if line[i] == line[i+1] or (line[i]+line[i+1] in (EQUALITY_OPS + ASSIGNMENT_OPS)):
+                if (line[i] == line[i + 1]) or ((line[i] + line[i + 1]) in (EQUALITY_OPS + ASSIGNMENT_OPS)):
                     line.insert(i + 2, " ")
                     line.insert(i, " ")
                     i += 3
@@ -37,6 +39,8 @@ def split(data, config):
         line = "".join(line)
         line = line.split()
         data[index] = line
+        if spaces_on_begin % config["TABS_AND_INDENTS"]["INDENT"] != 0 :
+            errors_and_warnings[index + 1] = "WARNING! WRONG INDENT"
         indent = int(spaces_on_begin / config["TABS_AND_INDENTS"]["INDENT"])
         if not indent_levels:
             indent_levels.append(0)
@@ -45,17 +49,20 @@ def split(data, config):
         else:
             indent_levels.append(indent)
 
+
+
     return data, indent_levels
 
 
-def tokenize(data, config):
-    data, indent_levels = split(data, config)
+def tokenize(input_data, config, errors_and_warnings):
+    data, indent_levels = split(input_data, config, errors_and_warnings)
+
     tokens = list(dict())
     for line in data:
         for item in line:
             if item in kwlist:
                 item = (item, "KEYWORD")
-            elif item in string.punctuation+"<<>><<<**==":
+            elif item in tuple(string.punctuation) + (ASSIGNMENT_OPS+RELATIONAL_OPS+EQUALITY_OPS+SHIFT_OPS):
                 item = (item, "PUNCTUATION")
             else:
                 item = (item, "NAME or VALUE")
@@ -65,7 +72,23 @@ def tokenize(data, config):
     return tokens, indent_levels
 
 
-def refact(tokens, indent_levels, config):
+def check_errors(input_data, data, errors_and_warnings):
+    i = 0
+    j = 0
+    while i < len(input_data) and j < len(data):
+        while not re.search("\S", input_data[i]):
+            i += 1
+        while not re.search("\S", data[j]):
+            j += 1
+        if input_data[i] != data[j] and \
+                re.search("\S", input_data[i]).start() == re.search("\S", data[j]).start():
+            errors_and_warnings[i + 1] = "WRONG SPACES POSITION"
+        i += 1
+        j += 1
+
+
+
+def refact(input_data, tokens, indent_levels, config, errors_and_warings):
     data = list()
     line = ""
 
@@ -83,7 +106,7 @@ def refact(tokens, indent_levels, config):
         __within = False
         __around = False
 
-        #func_names = list()
+        # func_names = list()
         token_type = item[1]
         token = item[0]
 
@@ -118,7 +141,7 @@ def refact(tokens, indent_levels, config):
                     if config["SPACES"]["WITHIN_METHOD_CALL_PARENTHESES"] and tokens[i - 1][0] != "(":
                         __before = True
                     __method_call = False
-                if __method_declaration and\
+                if __method_declaration and \
                         config["SPACES"]["WITHIN_METHOD_DECLARATION_PARENTHESES"] and tokens[i - 1][0] != "(":
                     __before = True
             elif token == POWER_OP and config["SPACES"]["AROUND_POWER_OP"]:
@@ -147,7 +170,7 @@ def refact(tokens, indent_levels, config):
                 if config["SPACES"]["BEFORE_LEFT_BRACKET"]:
                     __before = True
                 if config["SPACES"]["WITHIN_BRACKETS"]:
-                        __within = True
+                    __within = True
             elif token == "{" and config["SPACES"]["WITHIN_BRACES"]:
                 __within = True
             elif token == ",":
@@ -192,27 +215,98 @@ def refact(tokens, indent_levels, config):
             if __after or __within:
                 line += " "
 
-        __class_or_func = indent_levels[__line_num] < indent_levels[__line_num-1] or __blank_lines > -1
+        __class_or_func_end = indent_levels[__line_num] < indent_levels[__line_num - 1] or __blank_lines > -1
 
         if token_type == "NEW_LINE":
             __blank_lines += 1
-            if (__class_or_func and __blank_lines <= config["BLANK_LINES"]["AROUND_TOP_LEVEL_CLASSES_AND_FUNCS"])\
-                    or (__blank_lines <= config["BLANK_LINES"]["MAX_IN_CODE"])\
-                    or (__method_declaration and __blank_lines < config["BLANK_LINES"]["MAX_IN_DECLARATION"]):
-                data.append(line)
-                __line_num += 1
-                line = ""
-            else:
-                line = ""
+            data.append(line)
+            __line_num += 1
+            line = ""
+
+            if __method_declaration or __method_call or tokens[i - 1][0] == "\\":
+                __continuation_indent = True
 
             if i < len(tokens) - 1:
-                line += " " * indent_levels[__line_num] * config["TABS_AND_INDENTS"]["INDENT"]
+                if __continuation_indent:
+                    line += " " * (indent_levels[__line_num] - 1) * config["TABS_AND_INDENTS"]["INDENT"] \
+                            + " " * config["TABS_AND_INDENTS"]["CONTINUATION_INDENT"]
+                    __continuation_indent = False
+                else:
+                    line += " " * indent_levels[__line_num] * config["TABS_AND_INDENTS"]["INDENT"]
+
+    __class = False
+    __func = False
+    __blank_lines = 0
+    __previous_line = ""
+    __first_method_or_operation = list() # list of bool | True if in module, class, def first_method has been found
+
+    i = 0
+
+    check_errors(input_data, data, errors_and_warings)
+
+    while i < len(data):
+        line = data[i]
+        if not re.search("\S", line):
+            __blank_lines += 1
+            if len(__first_method_or_operation) > 1:
+                if __first_method_or_operation[-1]:
+                    if __class:
+                        __class = False
+
+                       # print("\tclass ended")
+                    elif __func:
+                        __func = False
+                        #print("\tfunc ended")
+
         else:
+            if line.find("class") > -1:
+                __class = True
+                __first_method_or_operation.append(False)
+                #print("class")
+                if line.find("class") == 0:
+                    if __blank_lines != config["BLANK_LINES"]["AROUND_TOP_LEVEL_CLASSES_AND_FUNCS"]:
+                        data.insert(i, "\n" * (config["BLANK_LINES"]["AROUND_TOP_LEVEL_CLASSES_AND_FUNCS"] - __blank_lines))
+                        errors_and_warings[i + 1] = "ERROR! NOT ENOUGH BLANK LINES"
+                        i += config["BLANK_LINES"]["AROUND_TOP_LEVEL_CLASSES_AND_FUNCS"] - __blank_lines
+                else:
+                    if __blank_lines != config["BLANK_LINES"]["AROUND_CLASS"]:
+                        data.insert(i, "\n" * (config["BLANK_LINES"]["AROUND_CLASS"] - __blank_lines))
+                        errors_and_warings[i + 1] = "ERROR! NOT ENOUGH BLANK LINES"
+                        i += config["BLANK_LINES"]["AROUND_CLASS"] - __blank_lines
+            elif line.find("def") > -1:
+                __first_method_or_operation.append(False)
+                #print("def")
+                __func = True
+                if line.find("def") == 0:
+                    if __blank_lines < config["BLANK_LINES"]["AROUND_TOP_LEVEL_CLASSES_AND_FUNCS"]:
+                        data.insert(i, "\n" * (config["BLANK_LINES"]["AROUND_TOP_LEVEL_CLASSES_AND_FUNCS"] - __blank_lines))
+                        errors_and_warings[i + 1] = "ERROR! NOT ENOUGH BLANK LINES"
+                        i += config["BLANK_LINES"]["AROUND_TOP_LEVEL_CLASSES_AND_FUNCS"] - __blank_lines
+                else:
+                    if __blank_lines != config["BLANK_LINES"]["AROUND_METHOD"]:
+                        data.insert(i, "\n" * (config["BLANK_LINES"]["AROUND_METHOD"] - __blank_lines))
+                        errors_and_warings[i + 1] = "ERROR! NOT ENOUGH BLANK LINES"
+                        i += config["BLANK_LINES"]["AROUND_METHOD"] - __blank_lines
+            else:
+                if not __first_method_or_operation[-1]:
+                    __first_method_or_operation[-1] = True
+            if i > 1:
+                if __class:  # compare indent of curr line and previous
+                    if re.search('\S', __previous_line):
+                        if (re.search('\S', line).start()) / config["TABS_AND_INDENTS"]["INDENT"] < \
+                                re.search('\S', __previous_line).start() / config["TABS_AND_INDENTS"]["INDENT"]:
+                            __class = False
+                 #           print("\tclass ended")
+                if __func:
+                    if re.search('\S', __previous_line):
+                        if re.search('\S', line).start() / config["TABS_AND_INDENTS"]["INDENT"] < \
+                                re.search('\S', __previous_line).start() / config["TABS_AND_INDENTS"]["INDENT"]:
+                            __func = False
+                            #print("\tfunc ended")
+            __previous_line = line
+            __blank_lines = 0
 
-            __blank_lines = -1
-
-
-
+        i += 1
 
     return data
 
@@ -237,10 +331,15 @@ def format(argv):
         elif len(argv) > 2 and argv[2] == "-f":
             config_to_use = argv[argv.index("-f") + 1]
 
+        input_data = f.readlines()
+        errors_and_warnings = dict()
         from set_config import set_config
         config = set_config(args, new_config, config_to_use)
-        tokens, indent_levels = tokenize(f.readlines(), config)
-        data = refact(tokens, indent_levels, config)
+        tokens, indent_levels = tokenize(input_data, config, errors_and_warnings)
+        data = refact(input_data, tokens, indent_levels, config, errors_and_warnings)
+        for key in errors_and_warnings.keys():
+            print(errors_and_warnings[key], " | line ", key)
+
         f.close()
         f = open(file, "w")
         f.writelines(data)
